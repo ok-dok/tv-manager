@@ -1,0 +1,5 @@
+src/com/dokey/homecontrol/AdbClient.java
+src/com/dokey/homecontrol/AutoDetect.java
+src/com/dokey/homecontrol/BootReceiver.java
+src/com/dokey/homecontrol/MainActivity.java
+src/com/dokey/homecontrol/MainService.java
