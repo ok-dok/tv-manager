@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>电视管家 · 一键全屋关机</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--txt:#c9d1d9;--sub:#8b949e;--accent:#58a6ff;--ok:#3fb950}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.65 -apple-system,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:48px 24px 80px}
+.hero{text-align:center;margin-bottom:48px}
+.icon{width:88px;height:88px;border-radius:20px}
+h1{font-size:2.2rem;margin:12px 0 4px}
+.subtitle{color:var(--sub);font-size:1rem}
+.about{background:var(--card);border-radius:14px;padding:20px 24px;margin-bottom:24px}
+.about h2,.card h2{font-size:1.1rem;margin:0 0 12px;color:var(--accent);border-bottom:1px solid #21262d;padding-bottom:8px}
+.card{background:var(--card);border-radius:14px;padding:20px 24px;margin-bottom:24px}
+.card p{margin:0 0 12px}
+.arch{background:#0a0e14;border-radius:10px;padding:14px;font:13px/1.6 "SF Mono",Consolas,monospace;color:#cfe2f7;overflow-x:auto;white-space:pre}
+.formula{display:inline-block;background:#0a0e14;color:var(--ok);padding:8px 14px;border-radius:8px;font:14px/1.6 "SF Mono",monospace;margin:8px 0}
+ul{margin:0 0 12px 18px;padding:0;list-style:none}
+ul li{position:relative;padding-left:22px;margin-bottom:8px}
+ul li::before{content:"▸";color:var(--accent);position:absolute;left:0}
+code{background:#0a0e14;padding:3px 6px;border-radius:6px;font-size:13px;color:#ffd580}
+.footer{border-top:1px solid #21262d;margin-top:40px;padding-top:20px;color:var(--sub);font-size:.9rem;text-align:center}
+a{color:var(--accent);text-decoration:none}
+ul li b.kw{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <img class="icon" src="icon.png" alt="icon">
+  <h1>电视管家</h1>
+  <div class="subtitle">一键全屋关机 · Android 盒子小工具</div>
+</div>
+
+<div class="about">
+  <h2>🎙️ 背景</h2>
+  <p>家里是一条常见链路：<b>腾讯极光 4 Pro 盒子 → Yamaha 功放 → TCL 电视</b>。按下极光遥控电源键，只有盒子自己待机；电视和功放三件套各打各的，得分别按电视遥控和功放遥控。用了很多年，一直都是这个体验。</p>
+  <p>问题是：电视是国行 TCL，固件对"外来设备"的 CEC standby 一律无视，经过 5 个变体实测全部拒绝；电视上也没有任何可用的多屏网络接口。</p>
+  <p>直到<strong>电视自身的 ADB（必须手动一次开启）</strong>被试出来：</p>
+  <div class="formula">adb shell input keyevent KEYCODE_POWER</div>
+  <p>这台电视会进入整机待机，且重启后 ADB 依旧可用。链路真正打通了。</p>
+</div>
+
+<div class="card">
+  <h2>🔌 架构</h2>
+<div class="arch">
+遥控器按键
+      ↓ KEY_POWER
+极光盒子 (Android 10)
+      ↓ SCREEN_OFF 广播
+┌─────────────────────────────┐
+│ 电视管家（App，前台服务）     │
+│  · SCREEN_OFF BroadcastReceiver │
+│  · 纯 Java ADB 客户端        │
+│  · CEC 0F 36 兜底（root 时）  │
+└─────────────────────────────┘
+  ├→ TV :5555  input KEYCODE_POWER
+  └→ 电视 → CEC Standby → 功放跟随关机
+</div>
+  <p>平时什么都不需要跑，就在盒子上常驻一个前台服务。电视关上时，电视自己会通过 HDMI 发 CEC Standby 广播，Yamaha 功放几乎百分百跟随关机。</p>
+</div>
+
+<div class="card">
+  <h2>✨ 能力</h2>
+  <ul>
+    <li><b class="kw">SCREEN_OFF 双路触发</b>：广播监听 + 每 1.5s 轮询 <code>dumpsys power</code></li>
+    <li><b class="kw">纯 Java ADB 客户端</b>：内置 ADB 协议（CNXN/OPEN/OKAY/WRTE/CLSE、AOSP 字节求和校验），不依赖 <code>adb</code> 二进制</li>
+    <li><b class="kw">自动发现电视</b>：扫描同网段 5555 的 ADB 设备，读 <code>ro.product.model</code> 写入配置；换电视也能用</li>
+    <li><b class="kw">手动按钮</b>：关电视+关功放、测试关电视、启动/停止常驻</li>
+    <li><b class="kw">开机自启</b>（BOOT_COMPLETED / QUICKBOOT幂等处理）</li>
+    <li><b class="kw">暗色卡片化 UI</b>，适配电视遥控键导航，带焦点高亮（白/蓝描边）</li>
+    <li><b class="kw">CEC 兜底</b>：有 root 时可直接 <code>echo 0F 36 > /sys/class/cec/cmd</code> 关功放</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>🔐 关键协议细节</h2>
+  <ul>
+    <li>ADB 协议 <code>data_check</code> = AOSP <strong>字节求和</strong>（<code>calculate_apacket_checksum</code>），不是 CRC32/adler32</li>
+    <li>shell 字符串末尾<strong>必须带 NUL</strong>，否则电视静默不回包</li>
+    <li>CNXN 的 arg1 用<strong>服务端返回的 max_payload</strong>（TCL 实测 7606）</li>
+    <li><code>shell:input keyevent KEYCODE_POWER\0</code> 即电视整机待机；5555/WiFi 断开即为关机成功的特征</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>📦 安装</h2>
+  <p>源码在 <a href="https://github.com/ok-dok/tv-manager">ok-dok/tv-manager</a>。APK 直接拉到 Releases 即可：</p>
+  <div class="arch">adb -s &lt;盒子IP&gt;:5555 install -r 电视管家.apk</div>
+  <p>电视侧 ADB 需要手动打开一次（TCL 国行：设置→关于→本机信息页面一秒内依次按遥控 上→下→左→右）。</p>
+</div>
+
+<div class="footer">
+  Made by <a href="https://github.com/ok-dok">ok-dok</a> · with 🌙 · CSS 3 only
+</div>
+
+</div>
+</body>
+</html>
